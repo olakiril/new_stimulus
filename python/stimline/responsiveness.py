@@ -3,7 +3,7 @@ from scipy import interpolate
 import datajoint as dj
 from pipeline import reso, stimulus
 
-schema = dj.schema('pipeline_quality', locals())
+schema = dj.schema('pipeline_responsiveness', locals())
 
 @schema
 class TrialResponse(dj.Computed):
