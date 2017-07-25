@@ -69,7 +69,7 @@ class TrialResponse(dj.Computed):
                     yield tk, ft
 
         for tk, ft in valid_flips_and_keys():
-            for tqdm(trk, s, tr, fr in zip(trace_keys, slices - 1, traces, fluorescence)):
+            for trk, s, tr, fr in tqdm(zip(trace_keys, slices - 1, traces, fluorescence)):
                 trace_time = frame_times[s::n_slices]
                 interp_trace = interpolate.interp1d(trace_time, np.convolve(tr, h_trace, mode='same'))
                 interp_fluor = interpolate.interp1d(trace_time, np.convolve(fr, h_trace, mode='same'))
