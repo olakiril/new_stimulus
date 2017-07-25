@@ -2,19 +2,16 @@ import numpy as np
 from scipy import interpolate
 import datajoint as dj
 from pipeline import reso, stimulus
-
+from tqdm import tqdm
 schema = dj.schema('pipeline_responsiveness', locals())
 
 @schema
 class ResponseLatency(dj.Lookup):
     definition = """
-    latency     : double  # response latency in ms.
+    latency     : decimal(4,3)  # response latency in seconds.
     """
 
-    @property
-    def contents(self):
-        return [i for i in zip(50 * np.arange(0, 10))]
-
+    contents = [[0.25]]
 
 
 @schema
@@ -49,7 +46,7 @@ class TrialResponse(dj.Computed):
         return reso.Activity() * ResponseLatency() & 'spike_method=5'
 
     def _make_tuples(self, key):
-        latency = key['latency'] / 1000
+        latency = key['latency']
 
         print('Populate ', key)
         self.insert1(key)
@@ -65,14 +62,14 @@ class TrialResponse(dj.Computed):
         frame_times = frame_times[:traces[0].shape[0] * n_slices]  # truncate if scan is interrupted.
         trial_keys, flips = (stimulus.Sync() * stimulus.Trial() & key).fetch(dj.key, 'flip_times')
 
-        def valid_flips_and_keys(tks, fts, frts):
-            mi, ma = frts.min(), frts.max()
-            for tk, ft in zip(tks, fts):
+        def valid_flips_and_keys():
+            mi, ma = frame_times.min(), frame_times[::n_slices].max()
+            for tk, ft in zip(trial_keys, map(np.squeeze, flips)):
                 if ft.min() > mi + latency and ft.max() < ma - latency:
                     yield tk, ft
 
-        for tk, ft in valid_flips_and_keys(trial_keys, map(np.squeeze, flips), frame_times[::n_slices]):
-            for trk, s, tr, fr in zip(trace_keys, slices - 1, traces, fluorescence):
+        for tk, ft in valid_flips_and_keys():
+            for tqdm(trk, s, tr, fr in zip(trace_keys, slices - 1, traces, fluorescence)):
                 trace_time = frame_times[s::n_slices]
                 interp_trace = interpolate.interp1d(trace_time, np.convolve(tr, h_trace, mode='same'))
                 interp_fluor = interpolate.interp1d(trace_time, np.convolve(fr, h_trace, mode='same'))
@@ -87,4 +84,3 @@ class TrialResponse(dj.Computed):
                 self.Fluorescence().insert1(
                     dict(trk, **tk, latency=key['latency'], pre_flips=pre_fluor, post_flips=post_fluor),
                     ignore_extra_fields=True)
-            print('.', end='', flush=True)
