@@ -13,7 +13,7 @@ setup(
     description="data processing chain for MICrONS project team ninai",
     long_description=long_description,
     author='Fabian Sinz, Dimitri Yatsenko, Jiakun Fu',
-    athor_email='sinz@bcm.edu',
+    athor_email='jiakun.fu.bcm@gmail.com',
     license="GNU LGPL",
     url='https://github.com/cajal/stimuli',
     keywords='neuroscientific data processing',
@@ -26,10 +26,5 @@ setup(
         'License :: OSI Approved :: GNU LGPL',
         'Topic :: Database :: Front-Ends',
     ],
-    scripts=[
-        'scripts/worker',
-        'scripts/worker-populate.py',
-        'scripts/worker-environment.py',
-    ]
 )
 
