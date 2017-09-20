@@ -11,7 +11,7 @@ sync_ts=CURRENT_TIMESTAMP   : timestamp                     # automatic
 classdef Sync < dj.Imported
     
     properties
-        keySource = experiment.Scan & preprocess.Prepare & stimulus.Trial
+        keySource = experiment.Scan & stimulus.Trial
     end
     
     methods(Static)
