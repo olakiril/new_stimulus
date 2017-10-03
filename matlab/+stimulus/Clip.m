@@ -14,34 +14,7 @@ classdef Clip < dj.Manual & stimulus.core.Visual
     end
     
     
-    methods(Static)
-        
-        function migrate
-            % migrate data from the legacy schema +vis
-            
-            control = stimulus.getControl;
-            
-            % migrate monet conditions
-            clip = vis.MovieClipCond & (vis.Trial*preprocess.Sync & 'trial_idx between first_trial and last_trial' & 'animal_id>0');
-            
-            condKeys = clip.fetch';
-            count = 0;
-            for key = condKeys
-                count = count + 1;
-                fprintf('[%d/%d]', count, length(condKeys))
-                cond = fetch(vis.MovieClipCond & key, '*');
-                cond = rmfield(cond, {'animal_id', 'psy_id', 'cond_idx'});
-                hash = control.makeConditions(stimulus.Clip, cond);
-                
-                % copy all trials that used this condition
-                for tuple = fetch(vis.Trial*preprocess.Sync & 'trial_idx between first_trial and last_trial' & key,...
-                        'last_flip_count->last_flip', 'trial_ts', 'flip_times')'
-                    insert(stimulus.Trial, setfield(rmfield(tuple, {'psy_id'}), 'condition_hash', hash{1}))
-                end
-            end
-        end
-        
-        
+    methods(Static)        
         
         function cond = prepare(cond)
             if ~exist(stimulus.Clip.movie_dir, 'dir')

@@ -16,6 +16,10 @@ classdef Control < handle
         trialQueue = stimulus.core.FIFO(1e5)
     end
     
+    properties
+        useTransactions = true
+    end
+    
     
     methods
         
@@ -23,11 +27,17 @@ classdef Control < handle
             % makes conditions and stores them the specialTable
             assert(isstruct(params), 'params must be a struct')
             
-            cleanup = onCleanup(@() self.conditionTable.schema.conn.cancelTransaction);
+            if self.useTransactions
+                cleanup = onCleanup(@() self.conditionTable.schema.conn.cancelTransaction);
+            end
             
             hashes = cell(size(params));
-            dbConn = self.conditionTable.schema.conn;
-            dbConn.cancelTransaction   % reset
+            if self.useTransactions
+                dbConn = self.conditionTable.schema.conn;
+                dbConn.cancelTransaction   % reset
+            else
+                dbConn = [];
+            end
             for i = 1:numel(params)
                 param = params(i);
                 condition = struct;
@@ -46,14 +56,20 @@ classdef Control < handle
                         fprintf .
                         param = specialTable.make(param);
                         specialTable.create    % to avoid implicit commits during transaction
-                        dbConn.startTransaction
+                        if self.useTransactions
+                            dbConn.startTransaction
+                        end
                         try
                             self.conditionTable.insert(condition)
                             param.condition_hash = hash;
                             specialTable.insert(param)
-                            dbConn.commitTransaction
+                            if self.useTransactions
+                                dbConn.commitTransaction
+                            end
                         catch err
-                            dbConn.cancelTransaction
+                            if self.useTransactions
+                                dbConn.cancelTransaction
+                            end
                             rethrow(err)
                         end
                     end

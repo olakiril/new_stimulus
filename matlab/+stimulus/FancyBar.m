@@ -28,32 +28,6 @@ classdef FancyBar < dj.Manual & stimulus.core.Visual
         version = '1'   
     end
     
-    methods(Static)
-        function migrate
-            % migrate synchronized trials from +vis, incrementally
-            control = stimulus.getControl;
-            control.clearAll
-            scans = experiment.Scan & (preprocess.Sync*vis.Trial*vis.FancyBar & 'trial_idx between first_trial and last_trial');
-            remain = scans - stimulus.Trial * stimulus.FancyBar; 
-            
-            for scanKey = remain.fetch'
-                disp(scanKey)
-                geometry = rmfield(fetch(experiment.DisplayGeometry & scanKey, '*'), {'display_timestamp', 'session'});
-                assert(length(geometry)==1, 'DisplayGeometry is missing')
-                
-                params = fetch(vis.FancyBar & (vis.Trial * preprocess.Sync & scanKey & 'trial_idx between first_trial and last_trial'), '*');
-                params = dj.struct.join(params, geometry);
-                hashes = control.makeConditions(stimulus.FancyBar, rmfield(params, {'animal_id', 'psy_id', 'cond_idx'}));
-                trials =  fetch(vis.Trial & vis.FancyBar & (preprocess.Sync & scanKey & 'trial_idx between first_trial and last_trial'), '*', 'last_flip_count->last_flip');
-                hashes = hashes(arrayfun(@(trial) find([params.cond_idx]==trial.cond_idx, 1, 'first'), trials));
-                trials = rmfield(trials, {'psy_id', 'cond_idx'});
-                [trials.condition_hash] = deal(hashes{:});
-                insert(stimulus.Trial, dj.struct.join(trials, scanKey))
-            end
-        end
-    end
-    
-    
     methods
 
         function showTrial(self, cond)
