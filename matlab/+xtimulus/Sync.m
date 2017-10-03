@@ -13,8 +13,7 @@ classdef Sync < dj.Imported
     
     properties
         keySource = (experiment.Scan  - ...
-            experiment.ScanIgnored  - ...
-            xtimulus.MissingFile) & vis.Session & 'aim="2pScan"'
+            experiment.ScanIgnored) & vis.Session & 'aim="2pScan"'
     end
     
     methods(Access=protected)
@@ -89,15 +88,39 @@ classdef Sync < dj.Imported
             for cls = specialClasses
                 fprintf('Migrating %s\n', class(cls{1}))
                 switch class(cls{1})
-                    case 'vis.SingleDot'
-                        dots = vis.SingleDot & trials;
-                        condKeys = dots.fetch';
+                    case {'vis.FancyBar'}
+                        % general simple condition with monitor information
+                        specialCondition = cls{1} & trials;
+                        condKeys = specialCondition.fetch';
                         count = 0;
+                        newCondition = feval(replace(class(cls{1}), 'vis.', 'stimulus.'));
+                        for condKey = condKeys
+                            count = count + 1;
+                            fprintf('[%d/%d', count, length(condKeys))
+                            cond = fetch(cls{1}*proj(vis.Session,...
+                                'monitor_distance', 'monitor_size', 'monitor_aspect', 'resolution_x', 'resolution_y') & condKey, '*');
+                            hash = control.makeConditions(newCondition, rmfield(cond, {'animal_id', 'psy_id', 'cond_idx'}));
+                            for tuple = fetch(trials & condKey, '*', 'last_flip_count->last_flip', 'trial_ts', 'flip_times')'
+                                if ~exists(stimulus.Trial & rmfield(tuple, 'flip_times'))
+                                    insert(stimulus.Trial, ...
+                                        dj.struct.join(key, ...
+                                        setfield(rmfield(tuple, {'psy_id', 'cond_idx'}), 'condition_hash', hash{1})))
+                                end
+                            end
+                        end
+
+                    
+                    case {'vis.SingleDot'}
+                        % general simple condition with no lookups
+                        specialCondition = cls{1} & trials;
+                        condKeys = specialCondition.fetch';
+                        count = 0;
+                        newCondition = feval(replace(class(cls{1}), 'vis.', 'stimulus.'));
                         for condKey = condKeys
                             count = count + 1;
                             fprintf('[%d/%d', count, length(condKeys))
                             cond = fetch(cls{1} & condKey, '*');
-                            hash = control.makeConditions(stimulus.SingleDot, rmfield(cond, {'animal_id', 'psy_id', 'cond_idx'}));
+                            hash = control.makeConditions(newCondition, rmfield(cond, {'animal_id', 'psy_id', 'cond_idx'}));
                             for tuple = fetch(trials & condKey, '*', 'last_flip_count->last_flip', 'trial_ts', 'flip_times')'
                                 if ~exists(stimulus.Trial & rmfield(tuple, 'flip_times'))
                                     insert(stimulus.Trial, ...
