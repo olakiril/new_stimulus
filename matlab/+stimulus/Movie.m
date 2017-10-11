@@ -19,7 +19,8 @@ classdef Movie < dj.Lookup
     
     methods 
         function createClips(obj)
-            [path,file,file_temp,dur,codec] = fetch1(obj,'path','original_file','file_template','file_duration','codec');
+            [path,file,file_temp,dur,codec] = fetch1(obj, ...
+                'path', 'original_file', 'file_template', 'file_duration', 'codec');
             
             infile = getLocalPath(fullfile(path,file));
             info = ffmpeginfo(infile);

@@ -12,13 +12,13 @@ sync_ts=CURRENT_TIMESTAMP   : timestamp                     # automatic
 classdef Sync < dj.Imported
     
     properties
-        keySource = (experiment.Scan - experiment.ScanIgnored & 'aim="2pScan"') & vis.Session
+        keySource = (experiment.Scan  - ...
+            experiment.ScanIgnored) & vis.Session & 'aim="2pScan"'
     end
     
     methods(Access=protected)
         
         function makeTuples(self, key)
-            
             assert(numel(key)==1)
             
             % read photodiode signal
@@ -50,6 +50,143 @@ classdef Sync < dj.Imported
             ignore_extra = dj.set('ignore_extra_insert_fields', true);
             self.insert(tuple)
             dj.set('ignore_extra_insert_fields', ignore_extra)
+            
+            % find trials and condition
+            trials = vis.Trial & tuple & sprintf('trial_idx between %d and %d', tuple.first_trial, tuple.last_trial);
+            
+            remaining = trials;
+            specialClasses = {};
+            for cls = {
+                    vis.Monet
+                    vis.Grating
+                    vis.Matisse
+                    vis.Matisse2
+                    vis.MovieClipCond
+                    vis.MovieStillCond
+                    vis.MovieSeqCond
+                    vis.FancyBar
+                    vis.Grating
+                    vis.SingleDot
+                    vis.Trippy
+                    }'
+                assert(length(cls{1}.primaryKey)==3 && ...
+                    all(ismember({'animal_id', 'psy_id', 'cond_idx'}, cls{1}.primaryKey)))
+                if exists(trials & cls{1})
+                    specialClasses(end+1) = cls; %#ok<AGROW>
+                    remaining = remaining - cls{1};
+                end
+            end
+            if exists(remaining)
+                error 'Could not find the condition for a trial'
+            end
+            
+            
+            control = stimulus.getControl;
+            control.useTransactions = false;
+            
+            % insert conditions
+            for cls = specialClasses
+                fprintf('Migrating %s\n', class(cls{1}))
+                switch class(cls{1})
+                    case {'vis.FancyBar'}
+                        % general simple condition with monitor information
+                        specialCondition = cls{1} & trials;
+                        condKeys = specialCondition.fetch';
+                        count = 0;
+                        newCondition = feval(replace(class(cls{1}), 'vis.', 'stimulus.'));
+                        for condKey = condKeys
+                            count = count + 1;
+                            fprintf('[%d/%d', count, length(condKeys))
+                            cond = fetch(cls{1}*proj(vis.Session,...
+                                'monitor_distance', 'monitor_size', 'monitor_aspect', 'resolution_x', 'resolution_y') & condKey, '*');
+                            hash = control.makeConditions(newCondition, rmfield(cond, {'animal_id', 'psy_id', 'cond_idx'}));
+                            for tuple = fetch(trials & condKey, '*', 'last_flip_count->last_flip', 'trial_ts', 'flip_times')'
+                                if ~exists(stimulus.Trial & rmfield(tuple, 'flip_times'))
+                                    insert(stimulus.Trial, ...
+                                        dj.struct.join(key, ...
+                                        setfield(rmfield(tuple, {'psy_id', 'cond_idx'}), 'condition_hash', hash{1})))
+                                end
+                            end
+                        end
+
+                    
+                    case {'vis.SingleDot'}
+                        % general simple condition with no lookups
+                        specialCondition = cls{1} & trials;
+                        condKeys = specialCondition.fetch';
+                        count = 0;
+                        newCondition = feval(replace(class(cls{1}), 'vis.', 'stimulus.'));
+                        for condKey = condKeys
+                            count = count + 1;
+                            fprintf('[%d/%d', count, length(condKeys))
+                            cond = fetch(cls{1} & condKey, '*');
+                            hash = control.makeConditions(newCondition, rmfield(cond, {'animal_id', 'psy_id', 'cond_idx'}));
+                            for tuple = fetch(trials & condKey, '*', 'last_flip_count->last_flip', 'trial_ts', 'flip_times')'
+                                if ~exists(stimulus.Trial & rmfield(tuple, 'flip_times'))
+                                    insert(stimulus.Trial, ...
+                                        dj.struct.join(key, ...
+                                        setfield(rmfield(tuple, {'psy_id', 'cond_idx'}), 'condition_hash', hash{1})))
+                                end
+                            end
+                        end
+                        
+                    case 'vis.Monet'
+                        % migrate monet conditions
+                        monet = vis.MonetLookup*vis.Monet & trials;
+                        condKeys = monet.fetch';
+                        count = 0;
+                        for condKey = condKeys
+                            count = count + 1;
+                            fprintf('[%d/%d]', count, length(condKeys))
+                            cond = fetch(vis.MonetLookup*vis.Monet & condKey, '*');
+                            assert(cond.frame_downsample == 1)
+                            params = cond.params;
+                            cond.movie = cond.cached_movie;
+                            cond = rmfield(cond, {'animal_id', 'psy_id', 'cond_idx', ...
+                                'moving_noise_paramhash', 'params', 'frame_downsample', ...
+                                'cached_movie', 'moving_noise_lookup_ts', 'luminance', 'contrast'});
+                            cond.fps = params{3};
+                            cond.directions = params{4}.direction;
+                            cond.onsets = params{4}.onsets;
+                            cond.x_degrees = params{2}(1);
+                            cond.y_degrees = params{2}(2);
+                            hash = control.makeConditions(stimulus.Monet, cond);
+                            
+                            % copy all trials that used this condition
+                            for tuple = fetch(trials & condKey, 'last_flip_count->last_flip', 'trial_ts', 'flip_times')'
+                                if ~exists(stimulus.Trial & rmfield(tuple, 'flip_times'))
+                                    insert(stimulus.Trial, ...
+                                        dj.struct.join(key, ...
+                                        setfield(rmfield(tuple, {'psy_id'}), 'condition_hash', hash{1})))
+                                end
+                            end
+                        end
+                        
+                    case 'vis.MovieClipCond'
+                        clip = vis.MovieClipCond & trials;
+                        condKeys = clip.fetch';
+                        count = 0;
+                        for condKey = condKeys
+                            count = count + 1;
+                            fprintf('[%d/%d]', count, length(condKeys))
+                            cond = fetch(vis.MovieClipCond & condKey, '*');
+                            cond = rmfield(cond, {'animal_id', 'psy_id', 'cond_idx'});
+                            hash = control.makeConditions(stimulus.Clip, cond);
+                            
+                            % copy all trials that used this condition
+                            for tuple = fetch(trials & condKey, 'last_flip_count->last_flip', 'trial_ts', 'flip_times')'
+                                if ~exists(stimulus.Trial & rmfield(tuple, 'flip_times'))
+                                    insert(stimulus.Trial, ...
+                                        dj.struct.join(key, ...
+                                        setfield(rmfield(tuple, {'psy_id'}), 'condition_hash', hash{1})))
+                                end
+                            end
+                        end
+                        
+                    otherwise
+                        error('migration for %s has not been implemented', class(cls{1}))
+                end
+            end
         end
     end
 end
@@ -85,6 +222,10 @@ trials = trialTable & key & ...
 % get all flip times for each trial, also get the number of the last flip in the trial
 [psy_id, last_flip_in_trial, trial_flip_times] = fetchn(trials,...
     'psy_id', 'last_flip_count', 'flip_times', 'ORDER BY trial_idx');
+
+if isempty(psy_id)
+    error 'Could not find any matching trials'
+end
 
 if any(psy_id ~= psy_id(1))
     warning 'Multiple Sessions per scan: not allowed.'

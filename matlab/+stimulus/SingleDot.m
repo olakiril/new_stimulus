@@ -16,32 +16,7 @@ classdef SingleDot < dj.Manual & stimulus.core.Visual
     properties(Constant)
         version = '1'
     end
-    
-    methods(Static)
-        function migrate
-            % incremental migrate from old +vis
-            special = vis.SingleDot;  % old special condition table
-            trial = vis.Trial;        % old trial table
-            newSpecial = stimulus.SingleDot;
-            
-            control = stimulus.getControl;
-            control.clearAll
-            scans = experiment.Scan & (preprocess.Sync*trial*special & 'trial_idx between first_trial and last_trial');
-            remain = scans - stimulus.Trial * newSpecial;
-            
-            for scanKey = remain.fetch'
-                disp(scanKey)
-                params = fetch(special & (trial * preprocess.Sync & scanKey & 'trial_idx between first_trial and last_trial'), '*');
-                hashes = control.makeConditions(newSpecial, rmfield(params, {'animal_id', 'psy_id', 'cond_idx'}));
-                trials =  fetch(trial & special & (preprocess.Sync & scanKey & 'trial_idx between first_trial and last_trial'), '*', 'last_flip_count->last_flip');
-                hashes = hashes(arrayfun(@(t) find([params.cond_idx]==t.cond_idx, 1, 'first'), trials));
-                trials = rmfield(trials, {'psy_id', 'cond_idx'});
-                [trials.condition_hash] = deal(hashes{:});
-                insert(stimulus.Trial, dj.struct.join(trials, scanKey))
-            end
-        end
-    end
-    
+        
     
     methods
         function showTrial(self, cond)

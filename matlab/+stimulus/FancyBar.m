@@ -7,7 +7,7 @@ monitor_size                : decimal(5,2)                  # (inches) size diag
 monitor_aspect              : decimal(4,3)                  # physical aspect ratio of monitor
 resolution_x                : smallint                      # (pixels) display resolution along x
 resolution_y                : smallint                      # (pixels) display resolution along y
-fps                         : decimal(5,2)                  # display refresh rate
+fps=60.00                   : decimal(5,2)                  # display refresh rate
 pre_blank                   : double                        # (s) blank period preceding trials
 luminance                   : float                         # (cd/m^2)
 contrast                    : float                         # michelson contrast
@@ -15,11 +15,10 @@ bar_width                   : float                         # Degrees
 grid_width                  : float                         # Degrees
 bar_speed                   : float                         # Bar speed in deg/s
 flash_speed                 : float                         # cycles/sec temporal frequency of the grid flickering
-style                       : enum('grating','checkerboard')# selection beween a bar with a flashing checkeboard or a moving grating
+style                       : enum('grating','checkerboard') # selection beween a bar with a flashing checkeboard or a moving grating
 grat_width                  : float                         # in cycles/deg
 grat_freq                   : float                         # in cycles/sec
-axis                        : enum('vertical', 'horizontal')# the direction of bar movement
-
+axis                        : enum('vertical','horizontal') # the direction of bar movement
 %}
 
 classdef FancyBar < dj.Manual & stimulus.core.Visual
@@ -27,32 +26,6 @@ classdef FancyBar < dj.Manual & stimulus.core.Visual
     properties(Constant)
         version = '1'   
     end
-    
-    methods(Static)
-        function migrate
-            % migrate synchronized trials from +vis, incrementally
-            control = stimulus.getControl;
-            control.clearAll
-            scans = experiment.Scan & (preprocess.Sync*vis.Trial*vis.FancyBar & 'trial_idx between first_trial and last_trial');
-            remain = scans - stimulus.Trial * stimulus.FancyBar; 
-            
-            for scanKey = remain.fetch'
-                disp(scanKey)
-                geometry = rmfield(fetch(experiment.DisplayGeometry & scanKey, '*'), {'display_timestamp', 'session'});
-                assert(length(geometry)==1, 'DisplayGeometry is missing')
-                
-                params = fetch(vis.FancyBar & (vis.Trial * preprocess.Sync & scanKey & 'trial_idx between first_trial and last_trial'), '*');
-                params = dj.struct.join(params, geometry);
-                hashes = control.makeConditions(stimulus.FancyBar, rmfield(params, {'animal_id', 'psy_id', 'cond_idx'}));
-                trials =  fetch(vis.Trial & vis.FancyBar & (preprocess.Sync & scanKey & 'trial_idx between first_trial and last_trial'), '*', 'last_flip_count->last_flip');
-                hashes = hashes(arrayfun(@(trial) find([params.cond_idx]==trial.cond_idx, 1, 'first'), trials));
-                trials = rmfield(trials, {'psy_id', 'cond_idx'});
-                [trials.condition_hash] = deal(hashes{:});
-                insert(stimulus.Trial, dj.struct.join(trials, scanKey))
-            end
-        end
-    end
-    
     
     methods
 
@@ -90,7 +63,7 @@ classdef FancyBar < dj.Manual & stimulus.core.Visual
             xmonsize =ymonsize*cond.monitor_aspect;% cm X monitor size
             monSize = [xmonsize ymonsize];
             
-            % calculatestaff
+            % calculate stuff
             if strcmp(cond.axis,'vertical'); axis = 2; else axis=1;end
             FoV = atand(monSize(axis)/2/x0)*2;
             GridCyclesPerRadiant = 180/cond.grid_width/pi/2; % spatial frequency of the grid in cycles per radiant
