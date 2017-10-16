@@ -10,6 +10,9 @@ classdef Control < handle
     end
     
     properties(SetAccess=protected)
+        trialId = []
+        audioHandle = []
+        scanKey = []
         conditionTable = stimulus.Condition
         trialTable = stimulus.Trial
         condCache = containers.Map
@@ -111,25 +114,23 @@ classdef Control < handle
         function close(self)
             self.screen.close
         end
-        
-        function run(self, scanKey)
-            % play the trials on the trialQueue
-            
-            % set up clean up
-            cleanupObj = onCleanup(@() self.cleanupRun());
-            
+
+        function prepare(self, scanKey)
+            % prepare trials
+            self.scanKey = scanKey;
+
             % intialize audio to be used as synchronization signal
             InitializePsychSound(1);
-            audioHandle = PsychPortAudio('Open', [], [], 0, 44100, 2);
+            self.audioHandle = PsychPortAudio('Open', [], [], 0, 44100, 2);
             sound = 2*ones(2,1000);
             sound(:,1:350) = 0;
-            PsychPortAudio('FillBuffer',audioHandle,sound);
-            PsychPortAudio('Volume',audioHandle,2);
+            PsychPortAudio('FillBuffer',self.audioHandle,sound);
+            PsychPortAudio('Volume',self.audioHandle,2);
             
             % initialize trialId
-            trialId = fetch1(self.trialTable & scanKey, 'max(trial_idx) -> n')+1;
-            if isnan(trialId)
-                trialId = 0;
+            self.trialId = fetch1(self.trialTable & scanKey, 'max(trial_idx) -> n')+1;
+            if isnan(self.trialId)
+                self.trialId = 0;
             end
             
             % initialize flip count
@@ -144,30 +145,35 @@ classdef Control < handle
                 HideCursor
                 Priority(MaxPriority(self.screen.win)); % Use realtime priority for better temporal precision:
             end
-            
-            while ~self.trialQueue.isempty
+        end
+
+        function run(self, scanKey)
+            % play the trials on the trialQueue
+
+            % set up clean up
+             cleanupObj = onCleanup(@() self.cleanupRun());
+
+             if ~self.trialQueue.isempty
                 % emit sync audio signal used for synchronization
-                PsychPortAudio('Start', audioHandle, 1, 0);
+                PsychPortAudio('Start', self.audioHandle, 1, 0);
                 
                 %%%% SHOW TRIAL %%%%
                 condition = self.condCache(self.trialQueue.pop);
                 condition.obj___.showTrial(condition)
                 
                 % save trial
-                trialRecord = scanKey;
-                trialRecord.trial_idx = trialId;
+                trialRecord = self.scanKey;
+                trialRecord.trial_idx = self.trialId;
                 trialRecord.condition_hash = condition.condition_hash;
                 trialRecord.flip_times = self.screen.clearFlipTimes();
                 trialRecord.last_flip = self.screen.flipCount;
                 self.trialTable.insertParallel(trialRecord)
-                trialId = trialId + 1;
+                self.trialId = self.trialId + 1;
             end
-            
         end
-        
     end
-    
-    
+
+
     methods(Access=private)
         function cleanupRun(self)
             % used only for cleanup in run
@@ -177,7 +183,5 @@ classdef Control < handle
             ShowCursor;
             disp 'cleaned up'
         end
-        
     end
-    
 end
