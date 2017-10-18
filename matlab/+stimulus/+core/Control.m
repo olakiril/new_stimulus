@@ -222,6 +222,9 @@ classdef Control < handle
         end
 %    end
 
+        function done = stimulus_done(self)
+            done = self.trialQueue.isempty ;
+        end
 
 %     methods(Access=private)
         function cleanupRun(self)
