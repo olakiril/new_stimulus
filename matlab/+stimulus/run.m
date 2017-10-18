@@ -1,3 +1,3 @@
-function run
-    stimulus.core.Control.control.run
+function run(key)
+    stimulus.core.Control.control.run(key)
 end

@@ -13,6 +13,7 @@ classdef Control < handle
         trialId = []
         audioHandle = []
         scanKey = []
+        player = []
         conditionTable = stimulus.Condition
         trialTable = stimulus.Trial
         condCache = containers.Map
@@ -115,10 +116,12 @@ classdef Control < handle
             self.screen.close
         end
 
-        function prepare(self, scanKey)
-            % prepare trials
-            self.scanKey = scanKey;
-
+        function run(self, scanKey)
+            % play the trials on the trialQueue
+            
+            % set up clean up
+            cleanupObj = onCleanup(@() self.cleanupRun());
+            
             % intialize audio to be used as synchronization signal
             InitializePsychSound(1);
             self.audioHandle = PsychPortAudio('Open', [], [], 0, 44100, 2);
@@ -145,14 +148,60 @@ classdef Control < handle
                 HideCursor
                 Priority(MaxPriority(self.screen.win)); % Use realtime priority for better temporal precision:
             end
+            
+            while ~self.trialQueue.isempty
+                % emit sync audio signal used for synchronization
+                PsychPortAudio('Start', self.audioHandle, 1, 0);
+                
+                %%%% SHOW TRIAL %%%%
+                condition = self.condCache(self.trialQueue.pop);
+                condition.obj___.showTrial(condition)
+                
+                % save trial
+                trialRecord = scanKey;
+                trialRecord.trial_idx = self.trialId;
+                trialRecord.condition_hash = condition.condition_hash;
+                trialRecord.flip_times = self.screen.clearFlipTimes();
+                trialRecord.last_flip = self.screen.flipCount;
+                self.trialTable.insertParallel(trialRecord)
+                self.trialId = self.trialId + 1;
+            end            
+        end
+        
+        function prepare(self, scanKey)
+            % prepare trials
+            self.scanKey = scanKey;
+            
+            % intialize audio to be used as synchronization signal
+            InitializePsychSound(1);
+            self.audioHandle = PsychPortAudio('Open', [], [], 0, 44100, 2);
+            sound = 2*ones(2,1000);
+            sound(:,1:350) = 0;
+            PsychPortAudio('FillBuffer',self.audioHandle,sound);
+            PsychPortAudio('Volume',self.audioHandle,2);
+
+            % initialize trialId
+            self.trialId = fetch1(self.trialTable & scanKey, 'max(trial_idx) -> n')+1;
+            if isnan(self.trialId)
+                self.trialId = 0;
+            end
+            
+            % initialize flip count
+            flip = fetch1(self.trialTable & dj.struct.pro(scanKey, self.flipKeyAttributes{:}), 'max(last_flip) -> n')+1;
+            if isnan(flip)
+                flip = 0;
+            end
+            self.screen.setFlipCount(flip)
+            self.screen.frameStep = 1;
+            
+            if ~stimulus.core.Visual.DEBUG
+                HideCursor
+                Priority(MaxPriority(self.screen.win)); % Use realtime priority for better temporal precision:
+            end
         end
 
-        function run(self, scanKey)
+        function remote_run(self)            
             % play the trials on the trialQueue
-
-            % set up clean up
-             cleanupObj = onCleanup(@() self.cleanupRun());
-
              if ~self.trialQueue.isempty
                 % emit sync audio signal used for synchronization
                 PsychPortAudio('Start', self.audioHandle, 1, 0);
@@ -171,10 +220,10 @@ classdef Control < handle
                 self.trialId = self.trialId + 1;
             end
         end
-    end
+%    end
 
 
-    methods(Access=private)
+%     methods(Access=private)
         function cleanupRun(self)
             % used only for cleanup in run
             self.screen.flip(struct('logFlips', false, 'checkDroppedFrames', false))
@@ -183,5 +232,5 @@ classdef Control < handle
             ShowCursor;
             disp 'cleaned up'
         end
-    end
+     end
 end
