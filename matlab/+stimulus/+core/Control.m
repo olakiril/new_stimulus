@@ -220,13 +220,16 @@ classdef Control < handle
                 self.trialId = self.trialId + 1;
             end
         end
-%    end
 
         function done = stimulus_done(self)
             done = self.trialQueue.isempty ;
         end
+        
+        % need the last trial to send it to network
+        function trial = nextTrial(self)
+            trial = self.trialId ;
+        end
 
-%     methods(Access=private)
         function cleanupRun(self)
             % used only for cleanup in run
             self.screen.flip(struct('logFlips', false, 'checkDroppedFrames', false))
